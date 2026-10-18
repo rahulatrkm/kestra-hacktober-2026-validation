@@ -68,14 +68,22 @@ def check_metadata(flow):
 
 def wait_for_server():
     deadline = time.monotonic() + 240
+    last_error = "API has not answered yet"
+    print("Waiting for the local Kestra JSON API, not its separate management port", flush=True)
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=3) as response:
-                if response.status == 200:
+            with urllib.request.urlopen(BASE + "/flows/search?size=1", timeout=3) as response:
+                if response.status == 200 and isinstance(json.load(response), dict):
                     return
-        except (urllib.error.URLError, TimeoutError):
-            time.sleep(2)
-    raise TimeoutError("Local Kestra did not become healthy")
+                raise ValueError("Kestra API readiness returned an unexpected response")
+        except urllib.error.HTTPError as error:
+            if error.code != 503:
+                raise RuntimeError(f"Kestra API readiness failed with HTTP {error.code}") from error
+            last_error = "API temporarily returned HTTP 503"
+        except (urllib.error.URLError, TimeoutError) as error:
+            last_error = str(error)
+        time.sleep(2)
+    raise TimeoutError(f"Local Kestra API did not become ready: {last_error}")
 
 
 def create_flow(flow):
