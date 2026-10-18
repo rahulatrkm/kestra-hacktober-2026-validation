@@ -19,8 +19,19 @@ jobs:
           python-version: "3.12"
       - name: Install declared validation dependency
         run: python -m pip install -r requirements-validation.txt
+      - name: Generate isolated test-server credentials
+        run: |
+          python - <<'PY'
+          import os
+          import secrets
+          password = "Aa1-" + secrets.token_urlsafe(32)
+          print(f"::add-mask::{password}")
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"KESTRA_TEST_PASSWORD={password}\n")
+          PY
       - name: Validate on real, isolated Kestra 2.0.6
         env:
+          KESTRA_TEST_USERNAME: blueprint-ci@example.invalid
           KESTRA_CONFIGURATION: |
             micronaut:
               server:
@@ -28,7 +39,8 @@ jobs:
             kestra:
               server:
                 basic-auth:
-                  enabled: false
+                  username: ${KESTRA_TEST_USERNAME}
+                  password: ${KESTRA_TEST_PASSWORD}
               tasks:
                 tmp-dir:
                   path: /tmp/kestra-wd/tmp
@@ -45,6 +57,8 @@ jobs:
           trap cleanup EXIT
           docker run --detach --name kestra-blueprint --network host --user root \
             --env KESTRA_CONFIGURATION \
+            --env KESTRA_TEST_USERNAME \
+            --env KESTRA_TEST_PASSWORD \
             --env JAVA_OPTS="-Xms256m -Xmx2g" \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             --volume /tmp:/tmp \
