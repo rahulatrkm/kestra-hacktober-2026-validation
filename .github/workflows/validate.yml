@@ -1,0 +1,52 @@
+name: Validate original Kestra blueprint
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install declared validation dependency
+        run: python -m pip install -r requirements-validation.txt
+      - name: Validate on real, isolated Kestra 2.0.6
+        env:
+          KESTRA_CONFIGURATION: |
+            micronaut:
+              server:
+                host: 127.0.0.1
+            kestra:
+              server:
+                basic-auth:
+                  enabled: false
+              tasks:
+                tmp-dir:
+                  path: /tmp/kestra-wd/tmp
+        run: |
+          set -euo pipefail
+          cleanup() {
+            code=$?
+            if docker inspect kestra-blueprint >/dev/null 2>&1; then
+              docker logs --tail 150 kestra-blueprint
+              docker rm --force kestra-blueprint
+            fi
+            exit "$code"
+          }
+          trap cleanup EXIT
+          docker run --detach --name kestra-blueprint --network host --user root \
+            --env KESTRA_CONFIGURATION \
+            --env JAVA_OPTS="-Xms256m -Xmx2g" \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            --volume /tmp:/tmp \
+            kestra/kestra:v2.0.6 server local
+          python scripts/validate_blueprint.py
