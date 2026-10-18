@@ -134,7 +134,13 @@ def execute(flow, inputs=None):
 
 
 def report(execution):
-    uri = execution["outputs"]["review_json"]
+    reports = [
+        task for task in execution["taskRunList"]
+        if task["taskId"] in {"rank_report", "no_comparison"}
+        and task["state"]["current"] == "SUCCESS"
+    ]
+    assert len(reports) == 1, "Exactly one successful report-producing branch is required"
+    uri = reports[0]["outputs"]["outputFiles"]["review.json"]
     assert isinstance(uri, str) and uri.startswith("kestra://")
     query = urllib.parse.urlencode({"path": uri})
     return request(f'/executions/{execution["id"]}/file?{query}')
