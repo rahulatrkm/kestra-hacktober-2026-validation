@@ -1,5 +1,7 @@
+import base64
 import copy
 import json
+import os
 import threading
 import time
 import urllib.error
@@ -17,12 +19,13 @@ FLOW_PATH = Path("flows/github-issue-local-duplicate-review.yaml")
 MODEL_REVISION = "751bff37182d3f1213fa05d7196b954e230abad9"
 
 
-def request(path, method="GET", data=None, content_type=None):
-    headers = {}
+def request(path, method="GET", data=None, content_type=None, timeout=60):
+    credentials = os.environ["KESTRA_TEST_USERNAME"] + ":" + os.environ["KESTRA_TEST_PASSWORD"]
+    headers = {"Authorization": "Basic " + base64.b64encode(credentials.encode()).decode()}
     if content_type:
         headers["Content-Type"] = content_type
     req = urllib.request.Request(BASE + path, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=60) as response:
+    with urllib.request.urlopen(req, timeout=timeout) as response:
         raw = response.read()
     return json.loads(raw) if raw else None
 
@@ -72,10 +75,9 @@ def wait_for_server():
     print("Waiting for the local Kestra JSON API, not its separate management port", flush=True)
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(BASE + "/flows/search?size=1", timeout=3) as response:
-                if response.status == 200 and isinstance(json.load(response), dict):
-                    return
-                raise ValueError("Kestra API readiness returned an unexpected response")
+            if isinstance(request("/flows/search?size=1", timeout=3), dict):
+                return
+            raise ValueError("Kestra API readiness returned an unexpected response")
         except urllib.error.HTTPError as error:
             if error.code != 503:
                 raise RuntimeError(f"Kestra API readiness failed with HTTP {error.code}") from error
