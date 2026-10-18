@@ -117,6 +117,17 @@ def execute(flow, inputs=None):
         result = request("/executions/" + execution_id)
         if result["state"]["current"] in {"SUCCESS", "FAILED", "KILLED", "WARNING", "CANCELLED"}:
             print(f'{execution_id}: {result["state"]["current"]}', flush=True)
+            if result["state"]["current"] != "SUCCESS":
+                logs = request("/logs/" + execution_id)
+                if not isinstance(logs, list):
+                    raise ValueError("Kestra did not return the documented execution-log list")
+                errors = [entry for entry in logs if entry.get("level") in {"ERROR", "WARN"}]
+                for entry in (errors or logs[-5:])[:15]:
+                    print("TASK DIAGNOSTIC:", json.dumps({
+                        "task": entry.get("taskId"),
+                        "level": entry.get("level"),
+                        "message": entry.get("message"),
+                    }), flush=True)
             return result
         time.sleep(2)
     raise TimeoutError(f"Execution {execution_id} did not finish")
