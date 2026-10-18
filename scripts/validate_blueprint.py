@@ -140,7 +140,8 @@ def report(execution):
         and task["state"]["current"] == "SUCCESS"
     ]
     assert len(reports) == 1, "Exactly one successful report-producing branch is required"
-    uri = reports[0]["outputs"]["outputFiles"]["review.json"]
+    outputs = request(f'/outputs/tasks/{execution["id"]}/{reports[0]["id"]}')
+    uri = outputs["outputFiles"]["review.json"]
     assert isinstance(uri, str) and uri.startswith("kestra://")
     query = urllib.parse.urlencode({"path": uri})
     return request(f'/executions/{execution["id"]}/file?{query}')
